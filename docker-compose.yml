@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        RUBY_VERSION: "3.1.2"
+    image: weather_app:latest
+    ports:
+      - "3000:3000"
+    tty: true
+    stdin_open: true
+    network_mode: host
+    environment:
+      RAILS_ENV: production
+      RAILS_LOG_TO_STDOUT: "true"
+    volumes:
+      - .:/rails
+    command: bundle exec rails server
+
+

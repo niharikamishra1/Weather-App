@@ -1,0 +1,284 @@
+<div class="container">
+  <h1 class="page-title">Weather Forecast</h1>
+
+  <div class="card">
+    <div class="card-body">
+      <%= form_with url: weather_index_path, method: :get, local: true, class: "form-inline" do |form| %>
+      <div class="form-row">
+        <div class="form-group">
+          <%= form.label :zip_code, "ZIP/City" %>
+          <%= form.text_field :zip_code, value: params[:zip_code], placeholder: "e.g. 94105 or London", class: "input"
+          %>
+        </div>
+        <div class="form-group">
+          <%= form.submit "Get Weather", class: "btn btn-primary" %>
+        </div>
+      </div>
+      <% end %>
+
+      <%= form_with url: weather_index_path, method: :get, local: true, id: "coords-form", class: "form-inline" do
+      |form| %>
+      <%= hidden_field_tag :lat, params[:lat] || @latitude %>
+      <%= hidden_field_tag :lng, params[:lng] || @longitude %>
+      <div class="form-row">
+        <div class="form-group">
+          <button type="submit" class="btn btn-secondary">Get Weather For Pin</button>
+        </div>
+      </div>
+      <% end %>
+
+      <% if flash[:alert] %>
+      <div class="alert alert-danger"><%= flash[:alert] %></div>
+      <% end %>
+
+      <div id="map" class="map"></div>
+    </div>
+  </div>
+
+  <% if @weather_data %>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <span><%= @weather_data["name"] %></span>
+        <% if @from_cache %>
+        <span class="badge badge-success">From Cache</span>
+        <% else %>
+        <span class="badge badge-info">From API</span>
+        <% end %>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="highlights">
+        <div class="highlight">
+          <div class="highlight-label">Temperature</div>
+          <div class="highlight-value"><%= @weather_data.dig('main', 'temp') %>°F</div>
+        </div>
+        <div class="highlight">
+          <div class="highlight-label">High</div>
+          <div class="highlight-value"><%= @weather_data.dig('main', 'temp_max') %>°F</div>
+        </div>
+        <div class="highlight">
+          <div class="highlight-label">Low</div>
+          <div class="highlight-value"><%= @weather_data.dig('main', 'temp_min') %>°F</div>
+        </div>
+        <div class="highlight">
+          <div class="highlight-label">Condition</div>
+          <div class="highlight-value"><%= @weather_data.dig('weather', 0, 'description') %></div>
+        </div>
+      </div>
+
+      <h3 class="section-title">All Details</h3>
+      <div class="table-responsive">
+        <table class="kv-table">
+          <thead>
+          <tr>
+            <th>Location</th>
+            <th>Temp (°F)</th>
+            <th>High (°F)</th>
+            <th>Low (°F)</th>
+            <th>Feels Like (°F)</th>
+            <th>Condition</th>
+            <th>Humidity (%)</th>
+            <th>Pressure (hPa)</th>
+            <th>Wind (mph @deg)</th>
+            <th>Clouds (%)</th>
+            <th>Visibility (m)</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr>
+            <td><%= @weather_data["name"] %></td>
+            <td><%= @weather_data.dig('main','temp') %></td>
+            <td><%= @weather_data.dig('main','temp_max') %></td>
+            <td><%= @weather_data.dig('main','temp_min') %></td>
+            <td><%= @weather_data.dig('main','feels_like') %></td>
+            <td><%= [@weather_data.dig('weather',0,'main'), @weather_data.dig('weather',0,'description')].compact.join('
+              - ') %>
+            </td>
+            <td><%= @weather_data.dig('main','humidity') %></td>
+            <td><%= @weather_data.dig('main','pressure') %></td>
+            <td><%= @weather_data.dig('wind','speed') %> @ <%= @weather_data.dig('wind','deg') %></td>
+            <td><%= @weather_data.dig('clouds','all') %></td>
+            <td><%= @weather_data['visibility'] %></td>
+          </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <% end %>
+
+  <% if @forecast_data %>
+  <div class="card" style="margin-top: 16px;">
+    <div class="card-header">
+      <div class="card-title">
+        <span>5-Day Forecast</span>
+        <% if @forecast_from_cache %>
+        <span class="badge badge-success">From Cache</span>
+        <% else %>
+        <span class="badge badge-info">From API</span>
+        <% end %>
+      </div>
+    </div>
+    <div class="card-body">
+      <% daily = summarize_forecast(@forecast_data) %>
+      <div class="forecast-grid">
+        <% daily.first(6).each do |d| %>
+        <div class="forecast-day">
+          <div class="forecast-date"><%= d[:date].strftime('%a %d %b') %></div>
+          <% if d[:icon] %>
+          <img alt="icon" class="forecast-icon" src="https://openweathermap.org/img/wn/<%= d[:icon] %>@2x.png"/>
+          <% end %>
+          <div class="forecast-temps">
+            <span class="high"><%= d[:temp_high]&.round %>°F</span>
+            <span class="low"><%= d[:temp_low]&.round %>°F</span>
+          </div>
+          <div class="forecast-desc"><%= d[:description].to_s.capitalize %></div>
+        </div>
+        <% end %>
+      </div>
+    </div>
+    </div>
+  <div class="card" style="margin-top: 16px;">
+      <div class="card-header">
+        <div class="card-title">
+          <span>Timeline (columns = forecast slices)</span>
+          <% if @forecast_from_cache %>
+          <span class="badge badge-success">From Cache</span>
+          <% else %>
+          <span class="badge badge-info">From API</span>
+          <% end %>
+        </div>
+      </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <% slices = (@forecast_data["list"].first(10) || []) %>
+        <% if slices.any? %>
+        <table class="kv-table table-sticky-first">
+          <thead>
+          <tr>
+            <th>Field</th>
+            <% slices.each do |s| %>
+            <th>
+              <% if (icon = s.dig("weather", 0, "icon")) %>
+              <img alt="icon" class="forecast-icon" style="width: 50px; height: 50px; background-color: #fff;"
+                   src="https://openweathermap.org/img/wn/<%= icon %>@2x.png"/>
+              <% end %>
+              <div><%= s["dt_txt"] %></div>
+            </th>
+            <% end %>
+          </tr>
+          </thead>
+          <tbody>
+          <tr>
+            <td>Temp (°F)</td>
+            <% slices.each do |s| %>
+            <td><%= s.dig("main", "temp") %></td>
+            <% end %>
+          </tr>
+          <tr>
+            <td>High (°F)</td>
+            <% slices.each do |s| %>
+            <td><%= s.dig("main", "temp_max") %></td>
+            <% end %>
+          </tr>
+          <tr>
+            <td>Low (°F)</td>
+            <% slices.each do |s| %>
+            <td><%= s.dig("main", "temp_min") %></td>
+            <% end %>
+          </tr>
+          <tr>
+            <td>Condition</td>
+            <% slices.each do |s| %>
+            <td><%= s.dig("weather", 0, "main") %> - <%= s.dig("weather", 0, "description") %></td>
+            <% end %>
+          </tr>
+          <tr>
+            <td>Wind (mph @deg)</td>
+            <% slices.each do |s| %>
+            <td><%= s.dig("wind", "speed") %> @ <%= s.dig("wind", "deg") %></td>
+            <% end %>
+          </tr>
+          <tr>
+            <td>Humidity (%)</td>
+            <% slices.each do |s| %>
+            <td><%= s.dig("main", "humidity") %></td>
+            <% end %>
+          </tr>
+          <tr>
+            <td>Clouds (%)</td>
+            <% slices.each do |s| %>
+            <td><%= s.dig("clouds", "all") %></td>
+            <% end %>
+          </tr>
+          <tr>
+            <td>POP (precip prob)</td>
+            <% slices.each do |s| %>
+            <td><%= s["pop"] %></td>
+            <% end %>
+          </tr>
+          <tr>
+            <td>Rain (3h mm)</td>
+            <% slices.each do |s| %>
+            <td><%= s.dig("rain", "3h").presence || 0 %></td>
+            <% end %>
+          </tr>
+          <tr>
+            <td>Snow (3h mm)</td>
+            <% slices.each do |s| %>
+            <td><%= s.dig("snow", "3h").presence || 0 %></td>
+            <% end %>
+          </tr>
+          </tbody>
+        </table>
+        <% else %>
+        <p class="empty-text">No forecast slices available</p>
+        <% end %>
+      </div>
+    </div>
+    </div>
+  </div>
+  <% end %>
+</div>
+
+<script>
+  // Make initMap global for Google callback
+  window.initMap = function() {
+    var initialLat = Number(<%= @latitude.to_f %>);
+    var initialLng = Number(<%= @longitude.to_f %>);
+
+    var map = new google.maps.Map(document.getElementById('map'), {
+      center: {lat: initialLat, lng: initialLng},
+      zoom: 10
+    });
+
+    var marker = new google.maps.Marker({
+      position: {lat: initialLat, lng: initialLng},
+      map: map,
+      draggable: true
+    });
+
+    function updateHidden(lat, lng) {
+      var latInput = document.querySelector('#coords-form input[name="lat"]');
+      var lngInput = document.querySelector('#coords-form input[name="lng"]');
+      latInput.value = lat.toFixed(6);
+      lngInput.value = lng.toFixed(6);
+    }
+
+    marker.addListener('dragend', function(event) {
+      var lat = event.latLng.lat();
+      var lng = event.latLng.lng();
+      updateHidden(lat, lng);
+    });
+
+    map.addListener('click', function(event) {
+      var lat = event.latLng.lat();
+      var lng = event.latLng.lng();
+      marker.setPosition({lat: lat, lng: lng});
+      updateHidden(lat, lng);
+    });
+  };
+</script>
+
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=<%=ENV['GOOGLE_API_KEY']%>&callback=initMap"></script>
